@@ -49,7 +49,7 @@ class LL:
         if self.head == None:
             raise IndexError("LL.__getitem__(" + str(key) + "): linked list is empty")
         if type(key) is int:
-            if not -1 * self.length < key < self.length: raise IndexError("LL.__getitem__(" + str(key) + "): " + str(key) + "is out of bounds")
+            if not -1 * self.length < key < self.length: raise IndexError("LL.__getitem__(" + str(key) + "): " + str(key) + " is out of bounds")
             ref = key if key > 0 else key + self.length
             count = 0
             current = self.head
@@ -64,6 +64,10 @@ class LL:
             if current == None: raise KeyError("LL.__getitem__(" + str(key) + "): " + str(key) + " not found in linked list")
             return current
 
+    def __setitem__(self, key, value):
+        node = self.__getitem__(key)
+        node.value = value
+
     def __str__(self):
         result = ""
         current = self.head
@@ -71,11 +75,3 @@ class LL:
             result += str(current.value) + "\n"
             current = current.next
         return result
-        
-def main():
-    L = LL()
-    L.insert("Kitty")
-    print(L[0].value)
-    
-if __name__ == '__main__':
-    main()
