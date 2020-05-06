@@ -75,13 +75,3 @@ class LL:
             result += str(current.value) + "\n"
             current = current.next
         return result
-        
-def main():
-    L = LL()
-    L.insert("Kitty")
-    L["Kitty"] = "Dog"
-    print(L["Dog"].value)
-    print(L)
-
-if __name__ == '__main__':
-    main()
