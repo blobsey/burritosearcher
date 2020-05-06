@@ -58,8 +58,8 @@ class LL:
                 count += 1
             return current
         else:
-            current = None
-            while (current.next != None and current.value != key):
+            current = self.head
+            while (current != None and current.value != key):
                 current = current.next
             if current == None: raise KeyError("LL.__getitem__(" + str(key) + "): " + str(key) + " not found in linked list")
             return current
@@ -75,3 +75,13 @@ class LL:
             result += str(current.value) + "\n"
             current = current.next
         return result
+        
+def main():
+    L = LL()
+    L.insert("Kitty")
+    L["Kitty"] = "Dog"
+    print(L["Dog"].value)
+    print(L)
+
+if __name__ == '__main__':
+    main()
