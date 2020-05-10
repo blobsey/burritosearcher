@@ -1,6 +1,5 @@
-import os, json, time, re, gc, pickle, logging, glob, itertools, orjson, lxml
+import os, time, re, gc, pickle, logging, glob, orjson, lxml
 from collections import defaultdict 
-from nltk import word_tokenize
 from nltk.stem import PorterStemmer
 from bs4 import BeautifulSoup
 from concurrent import futures
