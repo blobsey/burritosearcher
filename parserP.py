@@ -13,6 +13,7 @@ reg = re.compile(r"[a-zA-Z]+")
 jobList = [] #list to hold all the active threads
 log = logging.getLogger()
 log.setLevel(0)
+start_time = time.time()
 
 #--PARAMETERS--
 
@@ -22,7 +23,7 @@ numThreads = 6
 
 #how many files to process at once
 #each thread gets an ~equal section
-chunkSize = 1600
+chunkSize = 10000
 
 #folder containing corpus
 corpusFolder = "corpus"
@@ -51,16 +52,15 @@ def index(fileList, tempIndex):
     for entry in fileList: 
         filename = entry[1]
         docid = entry[2]
+        #open and tokenize json files contents
         with open(filename, "rb") as file:
-            
-            #open and tokenize json files contents
             site = orjson.loads(file.read()) 
             soup = BeautifulSoup(site["content"], "lxml")
             words = defaultdict(int)
             for tag in soup.find_all(text=True): 
                 #if tag.name in tagList:
                     for word in re.findall(reg, str(tag).lower()):
-                        #holds term frequency
+                        #record term frequency
                         words[word] += 1
 
             #stem tokens and add to index
@@ -75,9 +75,7 @@ def index(fileList, tempIndex):
         pickle.dump(terms, f, pickle.HIGHEST_PROTOCOL)         
     gc.collect()
 
-    # log.warning("indexed from: " +  fileList[0][7:]) #debug statement
-    # log.warning("          to: " +  fileList[-1][7:]) #debug statement
-    log.warning("thread %s took %s seconds", tempIndex, (time.time() - start_time))
+
     
 #takes a label (such as 'a' or 'b') and updates the corresponding index on disk           
 def updateIndex(label):
@@ -91,7 +89,6 @@ def updateIndex(label):
     for i,f in enumerate(fileObjects):
         tempIndexes[i] = pickle.load(f)
         
-    # logging.warning("START updating index %s", label) #debug statement
     #unpickle a certain index (file name will be "a.p" or "b.p" etc)
     with open(indexPath + str(label) + ".p", "rb") as f: 
         temp = pickle.load(f)
@@ -111,10 +108,10 @@ def updateIndex(label):
 def dump(executor):
     global jobList
     futures.wait(jobList) #wait for all threads to finish
+    log.warning("...took %s seconds", (time.time() - start_time))
     #give each thread a label (such as 'a' 'b' etc) to work on
     for label in 'abcdefghijklmnopqrstuvwxyz':
-        updateIndex(label)
-        #jobList.append(executor.submit(updateIndex, label))
+        jobList.append(executor.submit(updateIndex, label))
     futures.wait(jobList) #wait for all threads to finish
     
     for i in range(numThreads):
@@ -128,7 +125,6 @@ def dump(executor):
     futures.wait(jobList)
     
     gc.collect() #garbage collection to save precious RAM
-    log.warning("Partial Indexes updated...") #debug statement
  
 
 #helper function
@@ -143,8 +139,9 @@ def chunks(fileList):
     
 			
 def main():
-    global dumpNow, jobList, tempIndexes, chunkSize, numThreads
-    
+    global jobList, chunkSize, numThreads
+    log.warning("Using %s threads", numThreads)
+    log.warning("Processing chunks of %s files", chunkSize)
     #make a folder to hold all the partial indexes
     if not os.path.exists(indexPath):
         os.makedirs(indexPath)
@@ -179,18 +176,17 @@ def main():
       
     #sort filelist by file size
     #makes threads finish at similar times
-    fileList.sort(key=lambda s: s[0], reverse = True)
+    fileList.sort(key=lambda s: s[0], reverse = False)
     log.warning("...took %s seconds", (time.time() - start_time))
     
     #executor is basically a manager for numThreads threads
     with multithreader(max_workers = numThreads) as executor:   
         #split fileList into chunks
-        #chunk = even distribution of small, medium, big files
         for chunk in chunks(fileList):
-            #give each thread a section of chunk
-            #section = even distribution of small, medium, big files
+            #give each thread a section of chunk (even distr. of big, small files)
+            start_time = time.time()
+            log.warning("indexing filesizes %.5sKB to %.5sKB", chunk[0][0]/1024, chunk[-1][0]/1024)
             for i in range(numThreads):
-                #index(chunk[i::numThreads], i)
                 jobList.append(executor.submit(index, chunk[i::numThreads], i))
             dump(executor)
 
