@@ -35,6 +35,7 @@ indexPath = "./indexP/"
 tempIndexPath = "./temp/"
 
 #only tokenize text in these tags
+#DISABLED RIGHT NOW
 tagList = ["h1", "h2", "h3", "p", "b"]
 
 #TODO store an actual posting list instead of a 3D dict
@@ -137,11 +138,8 @@ def dump(executor):
 #so it should be a good mix of big and small files
 def chunks(fileList):
     totalSize = len(fileList)
-    filesPerChunk = int(totalSize/chunkSize)
-    if chunkSize > totalSize:
-        filesPerChunk = 1
-    for i in range(filesPerChunk):
-        yield fileList[i::filesPerChunk]
+    for i in range(0, totalSize, chunkSize):
+        yield fileList[i:i+chunkSize]
     
 			
 def main():
