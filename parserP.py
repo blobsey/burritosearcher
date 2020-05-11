@@ -1,4 +1,6 @@
-import os, time, re, gc, pickle, logging, glob, orjson, lxml
+import os, time, re, gc, pickle, glob, orjson, lxml
+import logging
+import random
 from collections import defaultdict 
 from nltk.stem import PorterStemmer
 from bs4 import BeautifulSoup
@@ -7,23 +9,23 @@ from concurrent.futures import ProcessPoolExecutor as multithreader
 
 #GLOBAL VARIABLES IMPORTANT DONT DELETE
 ps = PorterStemmer()
-currentThread = 0
-tempIndexes = dict() #4d dictionary bcuz i hate myself
 reg = re.compile(r"[a-zA-Z]+")
-currentDoc = 0 #global counter for what document were on
 jobList = [] #list to hold all the active threads
+log = logging.getLogger()
+log.setLevel(0)
 
 #--PARAMETERS--
 
 #number of threads to use
 #might be broken but u could try higher numbers
-numThreads = 4
+numThreads = 6
 
-#how many files to give each thread at once
-chunkSize = 300
+#how many files to process at once
+#each thread gets an ~equal section
+chunkSize = 1600
 
 #folder containing corpus
-corpusFolder = "TEST2"
+corpusFolder = "corpus"
 
 #folder to use as index
 indexPath = "./indexP/" 
@@ -32,35 +34,50 @@ indexPath = "./indexP/"
 #(they will be merged into partial indexes later)
 tempIndexPath = "./temp/"
 
-
-#nano wrote this and i love it <3
-def tokenize(file):
-    site = orjson.loads(file)
-    soup = BeautifulSoup(site["content"], "lxml")
-    tokens = re.findall(reg, ' '.join([line.lower() for line in soup.find_all(text=True)]))
-    return [ps.stem(token) for token in tokens]
+#only tokenize text in these tags
+tagList = ["h1", "h2", "h3", "p", "b"]
 
 #TODO store an actual posting list instead of a 3D dict
-def index(fileList, docid, tempIndex):
+def index(fileList, tempIndex):
     #temp dict, will pickle dump later
+    start_time = time.time()
+    
     terms = dict() 
     for label in 'abcdefghijklmnopqrstuvwxyz': 
         terms[label] = dict()
 
-    for filename in fileList: 
-        with open(filename) as file:
-            for token in tokenize(file.read()):
-                label = token[0]
-                terms[label].setdefault(token, defaultdict(int)) #if token doesnt exist, add it
-                terms[label][token][docid] += 1  
-                
-    updateTempIndex(tempIndex, terms) #write to temp file to be merged later
-    print(" DONE with one thread") #debug statement
-    
-def updateTempIndex(tempIndex, terms):
-    with open(tempIndexPath + str(tempIndex) + ".temp", "wb") as f:
-        pickle.dump(terms, f, pickle.HIGHEST_PROTOCOL)
+    #fileList is tuples of (filesize, filepath, docid)
+    for entry in fileList: 
+        filename = entry[1]
+        docid = entry[2]
+        with open(filename, "rb") as file:
+            
+            #open and tokenize json files contents
+            site = orjson.loads(file.read()) 
+            soup = BeautifulSoup(site["content"], "lxml")
+            words = defaultdict(int)
+            for tag in soup.find_all(text=True): 
+                #if tag.name in tagList:
+                    for word in re.findall(reg, str(tag).lower()):
+                        #holds term frequency
+                        words[word] += 1
 
+            #stem tokens and add to index
+            for word in words:
+                label = word[0]
+                token = ps.stem(word)
+                terms[label].setdefault(token, defaultdict(int)) #if token doesnt exist, add it
+                terms[label][token][docid] += words[word]
+       
+    #dump everything to temp file to merge later
+    with open(tempIndexPath + str(tempIndex) + ".temp", "wb") as f:
+        pickle.dump(terms, f, pickle.HIGHEST_PROTOCOL)         
+    gc.collect()
+
+    # log.warning("indexed from: " +  fileList[0][7:]) #debug statement
+    # log.warning("          to: " +  fileList[-1][7:]) #debug statement
+    log.warning("thread %s took %s seconds", tempIndex, (time.time() - start_time))
+    
 #takes a label (such as 'a' or 'b') and updates the corresponding index on disk           
 def updateIndex(label):
     fileObjects = []
@@ -95,8 +112,8 @@ def dump(executor):
     futures.wait(jobList) #wait for all threads to finish
     #give each thread a label (such as 'a' 'b' etc) to work on
     for label in 'abcdefghijklmnopqrstuvwxyz':
-        #updateIndex(label)
-        jobList.append(executor.submit(updateIndex, label))
+        updateIndex(label)
+        #jobList.append(executor.submit(updateIndex, label))
     futures.wait(jobList) #wait for all threads to finish
     
     for i in range(numThreads):
@@ -104,23 +121,31 @@ def dump(executor):
         empty = dict()
         pickle.dump(empty, f, pickle.HIGHEST_PROTOCOL)
         f.close()
+        
+    for i in range(numThreads):
+        jobList.append(executor.submit(gc.collect))
+    futures.wait(jobList)
     
     gc.collect() #garbage collection to save precious RAM
-    logging.warning(" UPDATING Indexes") #debug statement
-    
-def getNextThread():
-    global currentThread, numThreads
-    logging.warning(" JOB created for thread %s", currentThread) #debug statement
-    temp = currentThread
-    currentThread += 1
-    if currentThread >= numThreads:
-        currentThread = 0
-    return temp
+    log.warning("Partial Indexes updated...") #debug statement
+ 
+
+#helper function
+#breaks fileList into chunks of chunkSize
+#files should be evenly distributed across the fileList
+#in main, fileList is sorted biggest filesize -> smallest filesize
+#so it should be a good mix of big and small files
+def chunks(fileList):
+    totalSize = len(fileList)
+    filesPerChunk = int(totalSize/chunkSize)
+    if chunkSize > totalSize:
+        filesPerChunk = 1
+    for i in range(filesPerChunk):
+        yield fileList[i::filesPerChunk]
     
 			
 def main():
     global dumpNow, jobList, tempIndexes, chunkSize, numThreads
-    currentDoc = 0
     
     #make a folder to hold all the partial indexes
     if not os.path.exists(indexPath):
@@ -147,26 +172,31 @@ def main():
         pickle.dump(empty, f, pickle.HIGHEST_PROTOCOL)
         f.close()
         
-    #executor is basically a manager for 4 threads
-    with multithreader(max_workers=4) as executor:
-        #build a list of all files
-        fileList = list()
-        for filename in glob.glob(corpusFolder + "\**\*.json", recursive=True): 
-            currentDoc += 1
-            fileList.append(filename)
-            #give each thread a chunk of files to work on
-            if currentDoc % chunkSize == 0:
-                #index(fileList.copy(), currentDoc, getNextThread())
-                jobList.append(executor.submit(index, fileList.copy(), currentDoc, getNextThread()))
-                fileList.clear()
-            if currentDoc % (chunkSize*numThreads) == 0:
-                dump(executor)
-            
-        #do one last iteration to get the last chunk
-        #index(fileList.copy(), currentDoc, getNextThread())
-        jobList.append(executor.submit(index, fileList.copy(), currentDoc, getNextThread()))
-        dump(executor)
-            
+    log.warning("building file list...")
+    start_time = time.time()
+    #build a list of all files
+    fileList = list()
+    for docid, filename in enumerate(glob.glob(corpusFolder + "\**\*.json", recursive=True)): 
+        fileList.append( (os.path.getsize (filename), filename, docid) )
+      
+    #sort filelist by file size
+    #makes threads finish at similar times
+    fileList.sort(key=lambda s: s[0], reverse = True)
+    log.warning("...took %s seconds", (time.time() - start_time))
+    
+    #executor is basically a manager for numThreads threads
+    with multithreader(max_workers = numThreads) as executor:   
+        #split fileList into chunks
+        #chunk = even distribution of small, medium, big files
+        for chunk in chunks(fileList):
+            #give each thread a section of chunk
+            #section = even distribution of small, medium, big files
+            for i in range(numThreads):
+                #index(chunk[i::numThreads], i)
+                jobList.append(executor.submit(index, chunk[i::numThreads], i))
+            dump(executor)
+
+
 
 
 
