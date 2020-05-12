@@ -17,9 +17,7 @@ class LL:
         self.head = None
         self.sort = sort
         self.length = 0
-        if contents != None:
-            for c in contents:
-                self.insert(c)
+        if contents != None: {self.insert(c) for c in contents}
     
     # Insert a new node into the linked list 
     # If the linked list is empty, insert the new node and readjust the head pointer
@@ -39,7 +37,7 @@ class LL:
             self.head = node
         else:
             current = self.head
-            while (current.next != None and self.sort(current.next.value, value)):
+            while (current.next != None and self.sort(current.next.value, value) != current.next.value):
                 current = current.next
             node.next = current.next
             current.next = node
@@ -63,8 +61,7 @@ class LL:
             else:
                 raise ValueError("LL.delete(" + str(value) + "): " + str(value) + " does not exist in linked list")
         
-    # Perform an intersection between 2 linked list
-    def merge(self, ll2: "linked list", valsort=lambda a, b: a if a < b else b, valequal=lambda a, b: a==b) -> "list":    
+    def intersect(self, ll2: "linked list", valsort=lambda a, b: a if a < b else b, valequal=lambda a, b: a==b) -> "list":    
         answer = set()
         curr1 = self.head
         curr2 = ll2.head
@@ -78,20 +75,33 @@ class LL:
             else:
                 curr2 = curr2.next
         return answer
-       
+        
+    # Perform an intersection between 2 linked list
+    def merge(self, ll2: "linked list", valsort=lambda a, b: a if a < b else b, valequal=lambda a, b: a==b) -> "list":
+        answer = set()
+        if self == ll2:
+            curr1 = self.head
+            while curr1 != None:
+                answer.add(curr1.value)
+                curr1 = curr1.next
+        else: answer = self.intersect(ll2, valsort, valequal)        
+        return answer
+        
     # Perform the intersection between 2 list using the '&' operator   
     def __and__(self, ll2, valsort=lambda a, b: a if a < b else b, valequal=lambda a, b:a==b):
         return self.merge(ll2, valsort, valequal)
 
     # Check if two linked lists are equal to each other
     # Assume that the lists are sorted
-    def __equal__(self, ll2):
-        if self.head != ll2.head: return False
+    def __eq__(self, ll2):
+        if self.head.value != ll2.head.value: return False
         curr1 = self.head
         curr2 = ll2.head
         while curr1 != None and curr2 != None:
             if curr1.value != curr2.value:
                 return False
+            curr1 = curr1.next
+            curr2 = curr2.next
         return True
         
     # Get the length of the linked list
