@@ -6,6 +6,7 @@ from nltk.stem import PorterStemmer
 from bs4 import BeautifulSoup
 from concurrent import futures
 from concurrent.futures import ProcessPoolExecutor as multithreader
+import Posting
 
 #GLOBAL VARIABLES IMPORTANT DONT DELETE
 ps = PorterStemmer()
@@ -15,6 +16,8 @@ log = logging.getLogger()
 log.setLevel(0)
 
 #--PARAMETERS--
+#turn on/off multithreading for debug
+goFast = True
 
 #number of threads to use
 numThreads = 6
@@ -35,7 +38,7 @@ tempIndexPath = "./temp/"
 
 #only tokenize text in these tags
 #DISABLED RIGHT NOW
-tagList = ["h1", "h2", "h3", "p", "b"]
+tagList = ["h1", "h2", "h3", "strong", "b"]
 
 #TODO store an actual posting list instead of a 3D dict
 def index(fileList, tempIndex):
@@ -53,10 +56,12 @@ def index(fileList, tempIndex):
             site = orjson.loads(file.read()) 
             soup = BeautifulSoup(site["content"], "lxml")
             words = defaultdict(int)
-            for tag in soup.find_all(text=True): 
-                #if tag.name in tagList:
-                    for word in re.findall(reg, str(tag).lower()):
-                        words[word] += 1 #record term frequency
+            for text in soup.find_all(text=True):
+                for word in re.findall(reg, text.lower()):
+                    words[word] += 1 #record term frequency
+            for importantText in soup.find_all(tagList):
+                for word in re.findall(reg, str(importantText.string).lower()):
+                    words[word] += 4 #weight important terms higher
 
             #stem tokens and add to index
             for word in words:
@@ -101,12 +106,15 @@ def updateIndex(label):
         
     
 def dump(executor):
-    global jobList
+    global jobList, start_time
     futures.wait(jobList) #wait for all threads to finish
     log.warning("...took %s seconds", (time.time() - start_time))
     #give each thread a label (such as 'a' 'b' etc) to work on
     for label in 'abcdefghijklmnopqrstuvwxyz':
-        jobList.append(executor.submit(updateIndex, label))
+        if goFast:
+            jobList.append(executor.submit(updateIndex, label))
+        else:
+            updateIndex(label)
     futures.wait(jobList) #wait for all threads to finish
     
     for i in range(numThreads):
@@ -116,7 +124,10 @@ def dump(executor):
         f.close()
         
     for i in range(numThreads):
-        jobList.append(executor.submit(gc.collect))
+        if goFast:
+            jobList.append(executor.submit(gc.collect))
+
+        
     futures.wait(jobList)
     
     gc.collect() #garbage collection to save precious RAM
@@ -134,7 +145,7 @@ def chunks(fileList):
     
 			
 def main():
-    global jobList, chunkSize, numThreads
+    global jobList, chunkSize, numThreads, start_time
     log.warning("Using %s threads", numThreads)
     log.warning("Processing chunks of %s files", chunkSize)
     #make a folder to hold all the partial indexes
@@ -170,6 +181,9 @@ def main():
         fileList.append( (os.path.getsize (filename), filename, docid) )
     #sort filelist by file size
     #makes threads finish at similar times
+    with open("lookup.meme", "wb+") as f:
+        pickle.dump(fileList, f, pickle.HIGHEST_PROTOCOL)
+        
     fileList.sort(key=lambda s: s[0], reverse = False)
     log.warning("...took %s seconds", (time.time() - start_time))
     
@@ -181,8 +195,14 @@ def main():
             start_time = time.time()
             log.warning("indexing filesizes %.5sKB to %.5sKB", chunk[0][0]/1024, chunk[-1][0]/1024)
             for i in range(numThreads):
-                jobList.append(executor.submit(index, chunk[i::numThreads], i))
+                if goFast:
+                    jobList.append(executor.submit(index, chunk[i::numThreads], i))
+                else:
+                    index(chunk[i::numThreads], i)
             dump(executor)
+
+    
+        
 
 
 
@@ -190,8 +210,8 @@ def main():
 
 if __name__ == "__main__":
     print("LETS GOOOOOOOO")
-    start_time = time.time()
+    start = time.time()
     main()
-    print("--- %s seconds ---" % (time.time() - start_time))
+    print("--- %s seconds ---" % (time.time() - start))
     print("PRESS ANY KEY TO QUIT")
     input()

@@ -1,6 +1,4 @@
 class Posting:
-    def __init__(self, id, ranking, fields, positions):
-        self.id = id
-        self.ranking = ranking
+    def __init__(self, tfidf, fields ):
+        self.tfidf = tfidf
         self.fields = fields
-        self.pointers = pointers
