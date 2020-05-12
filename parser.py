@@ -38,13 +38,7 @@ tempIndexPath = "./temp/"
 #only tokenize text in these tags
 #DISABLED RIGHT NOW
 tagList = ["h1", "h2", "h3", "strong", "b"]
-        
-def dd():
-    return defaultdict(dd2)
-
-def dd2():
-    return defaultdict(Posting)
-        
+             
 
 #TODO store an actual posting list instead of a 3D dict
 def index(fileList, tempIndex):
