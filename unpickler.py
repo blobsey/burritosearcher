@@ -2,19 +2,11 @@
 #opens a .p file and dumps contents to unpickle folder
 
 import pickle, orjson, os
+from posting import Posting
 
 unpicklePath = "./unpickled/"
 
-def fetch(docid):
-    with open("lookup.meme", "rb") as file:
-        lookup = pickle.load(file)
-    
-    filename = lookup[docid][1]
-    with open(filename, "rb") as file:
-        site = orjson.loads(file.read()) 
-        
-    with open(str(docid) + ".html", "w+") as dump:
-        dump.write(site["content"])
+
 
 
 def unpickle(label):
@@ -27,7 +19,7 @@ def unpickle(label):
     with open(unpicklePath + label + ".txt", "w+") as dump:
         for token in temp:
             for docid in temp[token]:
-                line = token + " docid:" + str(docid) + " word freq: " + str(temp[token][docid]) + "\n"
+                line = token + " \tdocid:" + str(docid) + " \tterm freq: " + str(temp[token][docid].termfreq) + " \ttfidf: " + str(temp[token][docid].tfidf) + "\n"
                 dump.write(line)
                
 for label in "abcdefghijklmnopqrstuvwxyz":

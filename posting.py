@@ -1,4 +1,7 @@
 class Posting:
-    def __init__(self, tfidf, fields ):
-        self.tfidf = tfidf
-        self.fields = fields
+    
+    termfreq = 0
+    tfidf = 0.0
+        
+    def updateFreq(self, termfreq):
+        self.termfreq += termfreq

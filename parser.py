@@ -1,11 +1,11 @@
-import os, time, re, gc, pickle, glob, orjson, lxml
+import os, time, re, gc, pickle, glob, orjson, lxml, math
 import logging
-import random
 from collections import defaultdict 
 from nltk.stem import PorterStemmer
 from bs4 import BeautifulSoup
 from concurrent import futures
 from concurrent.futures import ProcessPoolExecutor as multithreader
+from posting import Posting
 
 #GLOBAL VARIABLES IMPORTANT DONT DELETE
 ps = PorterStemmer()
@@ -38,12 +38,21 @@ tempIndexPath = "./temp/"
 #only tokenize text in these tags
 #DISABLED RIGHT NOW
 tagList = ["h1", "h2", "h3", "strong", "b"]
+        
+def dd():
+    return defaultdict(dd2)
+
+def dd2():
+    return defaultdict(Posting)
+        
 
 #TODO store an actual posting list instead of a 3D dict
 def index(fileList, tempIndex):
     #temp dict, will pickle dump later
-    terms = dict() 
-    for label in 'abcdefghijklmnopqrstuvwxyz': 
+    #yes i know its ugly
+    #terms = defaultdict(dd)
+    terms = dict()
+    for label in 'abcdefghijklmnopqrstuvwxyz':
         terms[label] = dict()
 
     #fileList is tuples of (filesize, filepath, docid)
@@ -58,16 +67,19 @@ def index(fileList, tempIndex):
             for text in soup.find_all(text=True):
                 for word in re.findall(reg, text.lower()):
                     words[word] += 1 #record term frequency
-            for importantText in soup.find_all(tagList):
-                for word in re.findall(reg, str(importantText.string).lower()):
-                    words[word] += 4 #weight important terms higher
+            # for importantText in soup.find_all(tagList):
+            #     for word in re.findall(reg, str(importantText.string).lower()):
+            #         words[word] += 4 #weight important terms higher
 
             #stem tokens and add to index
+            #also add dummy value, will be filled by tf-idf score later
             for word in words:
                 label = word[0]
                 token = ps.stem(word)
-                terms[label].setdefault(token, defaultdict(int)) #if token doesnt exist, add it
-                terms[label][token][docid] += words[word]
+                terms[label].setdefault(token, dict())
+                terms[label][token].setdefault(docid, Posting())
+                terms[label][token][docid].updateFreq(words[word])
+            
        
     #dump everything to temp file to merge later
     with open(tempIndexPath + str(tempIndex) + ".temp", "wb") as f:
@@ -92,8 +104,11 @@ def updateIndex(label):
     with open(indexPath + str(label) + ".p", "rb") as f: 
         temp = pickle.load(f)
         for i in tempIndexes:
-            if label in tempIndexes[i]:
-                temp.update(tempIndexes[i][label]) #use .update() to add new entries to dict
+            for token in tempIndexes[i][label]:
+                for docid in tempIndexes[i][label][token]:
+                    temp.setdefault(token, dict())
+                    temp[token][docid] = tempIndexes[i][label][token][docid]
+                # temp.update(tempIndexes[i][label]) #use .update() to add new entries to dict
         
     #re-pickle the dict
     with open(indexPath + str(label) + ".p", "wb") as f:
@@ -107,7 +122,8 @@ def updateIndex(label):
 def dump(executor):
     global jobList, start_time
     futures.wait(jobList) #wait for all threads to finish
-    log.warning("...took %s seconds", (time.time() - start_time))
+    log.warning("Processing chunk took %s seconds", (time.time() - start_time))
+    start_time = time.time()
     #give each thread a label (such as 'a' 'b' etc) to work on
     for label in 'abcdefghijklmnopqrstuvwxyz':
         if goFast:
@@ -129,6 +145,8 @@ def dump(executor):
         
     futures.wait(jobList)
     
+    log.warning("Dumping took %s seconds", (time.time() - start_time))
+    
     gc.collect() #garbage collection to save precious RAM
  
 
@@ -141,6 +159,19 @@ def chunks(fileList):
     totalSize = len(fileList)
     for i in range(0, totalSize, chunkSize):
         yield fileList[i:i+chunkSize]
+        
+def calculateTFIDF(label, N):
+    with open(indexPath + label + ".p", "rb") as file:
+        partialIndex = pickle.load(file)
+        
+    for token in partialIndex:
+        for docid in partialIndex[token]:
+            tf = partialIndex[token][docid].termfreq
+            df = len(partialIndex[token])
+            partialIndex[token][docid].tfidf = tf * math.log(N/df)
+        
+    with open(indexPath + label + ".p", "wb+") as file:
+        partialIndex = pickle.dump(partialIndex, file, pickle.HIGHEST_PROTOCOL)
     
 			
 def main():
@@ -184,23 +215,36 @@ def main():
         pickle.dump(fileList, f, pickle.HIGHEST_PROTOCOL)
         
     fileList.sort(key=lambda s: s[0], reverse = False)
-    log.warning("...took %s seconds", (time.time() - start_time))
+    log.warning("Building file list took %s seconds", (time.time() - start_time))
     
-    #executor is basically a manager for numThreads threads
+    #executor is gives jobs to threads
     with multithreader(max_workers = numThreads) as executor:   
         #split fileList into chunks
         for chunk in chunks(fileList):
             #give each thread a section of chunk (even distr. of big, small files)
             start_time = time.time()
-            log.warning("indexing filesizes %.5sKB to %.5sKB", chunk[0][0]/1024, chunk[-1][0]/1024)
+            #log.warning("indexing filesizes %.5sKB to %.5sKB", chunk[0][0]/1024, chunk[-1][0]/1024)
             for i in range(numThreads):
                 if goFast:
                     jobList.append(executor.submit(index, chunk[i::numThreads], i))
                 else:
                     index(chunk[i::numThreads], i)
             dump(executor)
-
+            
+        futures.wait(jobList)
     
+        #calculate tfidf
+        log.warning("calculating tfidf...")
+        start_time = time.time()
+        N = len(fileList)
+        for label in 'abcdefghijklmnopqrstuvwxyz':
+            if goFast:
+                jobList.append(executor.submit(calculateTFIDF, label, N))
+            else:
+                calculateTFIDF(label, N)
+                
+        futures.wait(jobList)
+        log.warning("...tfidf took %s seconds", (time.time() - start_time))
         
 
 
