@@ -6,7 +6,6 @@ from nltk.stem import PorterStemmer
 from bs4 import BeautifulSoup
 from concurrent import futures
 from concurrent.futures import ProcessPoolExecutor as multithreader
-import Posting
 
 #GLOBAL VARIABLES IMPORTANT DONT DELETE
 ps = PorterStemmer()
