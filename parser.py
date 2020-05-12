@@ -24,7 +24,7 @@ numThreads = 6
 chunkSize = 10000
 
 #folder containing corpus
-corpusFolder = "corpus"
+corpusFolder = "TEST2"
 
 #folder to use as index
 indexPath = "./index/" 
