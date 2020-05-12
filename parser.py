@@ -50,7 +50,6 @@ def dd2():
 def index(fileList, tempIndex):
     #temp dict, will pickle dump later
     #yes i know its ugly
-    #terms = defaultdict(dd)
     terms = dict()
     for label in 'abcdefghijklmnopqrstuvwxyz':
         terms[label] = dict()
@@ -76,8 +75,8 @@ def index(fileList, tempIndex):
             for word in words:
                 label = word[0]
                 token = ps.stem(word)
-                terms[label].setdefault(token, dict())
-                terms[label][token].setdefault(docid, Posting())
+                terms[label].setdefault(token, defaultdict(Posting))
+                #terms[label][token].setdefault(docid, Posting())
                 terms[label][token][docid].updateFreq(words[word])
             
        
@@ -106,9 +105,8 @@ def updateIndex(label):
         for i in tempIndexes:
             for token in tempIndexes[i][label]:
                 for docid in tempIndexes[i][label][token]:
-                    temp.setdefault(token, dict())
-                    temp[token][docid] = tempIndexes[i][label][token][docid]
-                # temp.update(tempIndexes[i][label]) #use .update() to add new entries to dict
+                    temp.setdefault(token, defaultdict(Posting))
+                    temp[token][docid].updateFreq(tempIndexes[i][label][token][docid].termfreq)
         
     #re-pickle the dict
     with open(indexPath + str(label) + ".p", "wb") as f:
@@ -117,6 +115,8 @@ def updateIndex(label):
     #always remember to close file handles :)
     for f in fileObjects:
         f.close()
+        
+    gc.collect()
         
     
 def dump(executor):

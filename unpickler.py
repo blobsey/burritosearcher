@@ -3,11 +3,16 @@
 
 import pickle, orjson, os
 from posting import Posting
+from collections import defaultdict
 
 unpicklePath = "./unpickled/"
 
+def dd():
+    return defaultdict(dd2)
 
-
+def dd2():
+    return defaultdict(Posting)
+        
 
 def unpickle(label):
     with open("./index/" + label + ".p", "rb") as file:
