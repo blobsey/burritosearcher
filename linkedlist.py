@@ -13,10 +13,13 @@ class LLNode:
 # in postings and some pieces of information might require specialized 
 # sorting functions, there is an option to pass in a custom function as an argument
 class LL:
-    def __init__(self, sort=lambda a, b: a if a > b else b):
+    def __init__(self, contents=None, sort=lambda a, b: a if a > b else b):
         self.head = None
         self.sort = sort
         self.length = 0
+        if contents != None:
+            for c in contents:
+                self.insert(c)
     
     # Insert a new node into the linked list 
     # If the linked list is empty, insert the new node and readjust the head pointer
@@ -59,6 +62,37 @@ class LL:
                 self.length -= 1
             else:
                 raise ValueError("LL.delete(" + str(value) + "): " + str(value) + " does not exist in linked list")
+        
+    # Perform an intersection between 2 linked list
+    def merge(self, ll2: "linked list", valsort=lambda a, b: a if a < b else b, valequal=lambda a, b: a==b) -> "list":    
+        answer = set()
+        curr1 = self.head
+        curr2 = ll2.head
+        while curr1 != None and curr2 != None:
+            if valequal(curr1.value, curr2.value):
+                answer.add(curr1.value)
+                curr1 = curr1.next
+                curr2 = curr2.next
+            elif valsort(curr1.value, curr2.value) == curr1.value:
+                curr1 = curr1.next
+            else:
+                curr2 = curr2.next
+        return answer
+       
+    # Perform the intersection between 2 list using the '&' operator   
+    def __and__(self, ll2, valsort=lambda a, b: a if a < b else b, valequal=lambda a, b:a==b):
+        return self.merge(ll2, valsort, valequal)
+
+    # Check if two linked lists are equal to each other
+    # Assume that the lists are sorted
+    def __equal__(self, ll2):
+        if self.head != ll2.head: return False
+        curr1 = self.head
+        curr2 = ll2.head
+        while curr1 != None and curr2 != None:
+            if curr1.value != curr2.value:
+                return False
+        return True
         
     # Get the length of the linked list
     # To avoid traversing the entire linked list, we return a variable
