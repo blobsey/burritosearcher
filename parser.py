@@ -181,7 +181,6 @@ def main():
     if not os.path.exists(tempIndexPath):
         os.makedirs(tempIndexPath)
     
-        
     #make a bunch of empty partial indexes
     for label in 'abcdefghijklmnopqrstuvwxyz':
         f = open(indexPath + label + ".p", "wb+")
@@ -239,10 +238,6 @@ def main():
                 
         futures.wait(jobList)
         log.warning("...tfidf took %s seconds", (time.time() - start_time))
-        
-
-
-
 
 
 if __name__ == "__main__":
