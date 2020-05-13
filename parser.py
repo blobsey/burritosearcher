@@ -40,7 +40,6 @@ tempIndexPath = "./temp/"
 tagList = ["h1", "h2", "h3", "strong", "b"]
              
 
-#TODO store an actual posting list instead of a 3D dict
 def index(fileList, tempIndex):
     #temp dict, will pickle dump later
     #yes i know its ugly
@@ -60,9 +59,9 @@ def index(fileList, tempIndex):
             for text in soup.find_all(text=True):
                 for word in re.findall(reg, text.lower()):
                     words[word] += 1 #record term frequency
-            # for importantText in soup.find_all(tagList):
-            #     for word in re.findall(reg, str(importantText.string).lower()):
-            #         words[word] += 4 #weight important terms higher
+            for importantText in soup.find_all(tagList):
+                for word in re.findall(reg, str(importantText.string).lower()):
+                    words[word] += 4 #weight important terms higher
 
             #stem tokens and add to index
             #also add dummy value, will be filled by tf-idf score later
@@ -70,7 +69,6 @@ def index(fileList, tempIndex):
                 label = word[0]
                 token = ps.stem(word)
                 terms[label].setdefault(token, defaultdict(Posting))
-                #terms[label][token].setdefault(docid, Posting())
                 terms[label][token][docid].updateFreq(words[word])
             
        
@@ -115,8 +113,6 @@ def updateIndex(label):
     
 def dump(executor):
     global jobList, start_time
-    futures.wait(jobList) #wait for all threads to finish
-    log.warning("Processing chunk took %s seconds", (time.time() - start_time))
     start_time = time.time()
     #give each thread a label (such as 'a' 'b' etc) to work on
     for label in 'abcdefghijklmnopqrstuvwxyz':
@@ -125,13 +121,15 @@ def dump(executor):
         else:
             updateIndex(label)
     futures.wait(jobList) #wait for all threads to finish
-    
+
+    #clear temp indexes for the next chunk of data
     for i in range(numThreads):
         f = open(tempIndexPath + str(i) + ".temp", "wb+")
         empty = dict()
         pickle.dump(empty, f, pickle.HIGHEST_PROTOCOL)
         f.close()
-        
+
+    #might be useless, calls garbage collection on each of the threads
     for i in range(numThreads):
         if goFast:
             jobList.append(executor.submit(gc.collect))
@@ -196,7 +194,6 @@ def main():
         pickle.dump(empty, f, pickle.HIGHEST_PROTOCOL)
         f.close()
         
-    log.warning("building file list...")
     start_time = time.time()
     #build a list of all files
     fileList = list()
@@ -213,21 +210,22 @@ def main():
     #executor is gives jobs to threads
     with multithreader(max_workers = numThreads) as executor:   
         #split fileList into chunks
-        for chunk in chunks(fileList):
+        for chunkNum, chunk in enumerate(chunks(fileList)):
             #give each thread a section of chunk (even distr. of big, small files)
             start_time = time.time()
-            #log.warning("indexing filesizes %.5sKB to %.5sKB", chunk[0][0]/1024, chunk[-1][0]/1024)
             for i in range(numThreads):
                 if goFast:
                     jobList.append(executor.submit(index, chunk[i::numThreads], i))
                 else:
                     index(chunk[i::numThreads], i)
+
+            futures.wait(jobList) #wait for all threads to finish
+            log.warning("Processing chunk %s took %s seconds", chunkNum, (time.time() - start_time))
             dump(executor)
             
         futures.wait(jobList)
     
         #calculate tfidf
-        log.warning("calculating tfidf...")
         start_time = time.time()
         N = len(fileList)
         for label in 'abcdefghijklmnopqrstuvwxyz':
@@ -237,7 +235,7 @@ def main():
                 calculateTFIDF(label, N)
                 
         futures.wait(jobList)
-        log.warning("...tfidf took %s seconds", (time.time() - start_time))
+        log.warning("Calculating TF-IDF took %s seconds", (time.time() - start_time))
 
 
 if __name__ == "__main__":

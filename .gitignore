@@ -5,3 +5,5 @@ posting.py
 *.temp
 TEST/
 TEST2/
+*.p
+*.p
