@@ -1,13 +1,17 @@
-import re, os, glob, pickle, orjson
+import re, os, glob, pickle, orjson, bisect, time
 from nltk.stem import PorterStemmer
-#from unpickler import unpickle
-from lookup import lookup
 from statistics import mean
+
 reg = re.compile(r"[a-zA-Z]+")
 ps = PorterStemmer()
 
 def run_query():
-    #open all the pickles >:))
+    start_time = time.time()
+    
+    with open("lookup.meme", "rb") as file:
+        lookup = pickle.load(file)
+    
+    #load all partial indexes
     temp = dict()
     for label in "abcdefghijklmnopqrstuvwxyz":
         with open("./index/" + label + ".p", "rb") as file:
@@ -15,9 +19,11 @@ def run_query():
     
     while True:
         query = input("Input query search: ")
+        start_time = time.time()
         
         tokens = [ps.stem(word.lower()) for word in re.findall(reg, query)]
         results = list()    
+        
         #for each token, store list of docs that contain
         for token in tokens: 
             
@@ -26,20 +32,23 @@ def run_query():
                 results.append(set(postings.keys())) 
             else:
                 results.append(set())
+                
+        print("fetching all docs for each token took", (time.time() - start_time), "seconds")
+        start_time = time.time()
                     
         #rank by tfidf      
         rankings = list()
         for docid in set.intersection(*results): #boolean AND, intersect sets of docids
-            tfidfSum = 0
-            for token in tokens:
-                tfidfSum += temp[token[0]][token][docid].tfidf
-            rankings.append((tfidfSum/len(tokens), docid))#record the avg tf-idf 
-        rankings = sorted(rankings, reverse=True)
-        for i in range(5):
-            with open(lookup(rankings[i][1]), "rb") as file:
+            tfidfMean = mean([temp[token[0]][token][docid].tfidf for token in tokens]) #avg tfidf score for all tokens
+            bisect.insort(rankings, (tfidfMean, docid)) #record the avg tf-idf, docid
+
+        for i in range(-1, -6, -1):
+            with open(lookup[rankings[i][1]][1], "rb") as file: #look up the actual webpage from rankings[i][1] (the docid)
                 site = orjson.loads(file.read())
-                print ( site["url"], "tf-idf score:", rankings[i][0])
-        
+                print ( site["url"].ljust(85), "tf-idf score:", "{:.3f}".format(rankings[i][0]))
+                # with open(str(-i) + ".html", "wb+") as dump: #this code dumps the results into html files
+                #     dump.write(site["content"].encode(encoding="utf-8", errors="ignore"))
+        print("")
 
 
 if __name__ == "__main__":

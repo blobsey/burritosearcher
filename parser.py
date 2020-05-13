@@ -56,9 +56,11 @@ def index(fileList, tempIndex):
             site = orjson.loads(file.read()) 
             soup = BeautifulSoup(site["content"], "lxml")
             words = defaultdict(int)
+            totalWords = 0
             for text in soup.find_all(text=True):
                 for word in re.findall(reg, text.lower()):
                     words[word] += 1 #record term frequency
+                    totalWords += 1 #keep track of total words in doc
             for importantText in soup.find_all(tagList):
                 for word in re.findall(reg, str(importantText.string).lower()):
                     words[word] += 4 #weight important terms higher
@@ -69,7 +71,7 @@ def index(fileList, tempIndex):
                 label = word[0]
                 token = ps.stem(word)
                 terms[label].setdefault(token, defaultdict(Posting))
-                terms[label][token][docid].updateFreq(words[word])
+                terms[label][token][docid].updateFreq(words[word]/totalWords)
             
        
     #dump everything to temp file to merge later
