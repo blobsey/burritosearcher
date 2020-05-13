@@ -82,46 +82,35 @@ def index(fileList, tempIndex):
 
     
 #takes a label (such as 'a' or 'b') and updates the corresponding index on disk           
-def updateIndex(label):
-    fileObjects = []
-    tempIndexes = dict()
-    #open all temp indexes to merge them
-    for i in range(numThreads):
-        fileObjects.append(open(tempIndexPath + str(i) + ".temp", "rb"))
-            
-    #unpickle them               
-    for i,f in enumerate(fileObjects):
-        tempIndexes[i] = pickle.load(f)
-        
-    #unpickle a certain index (file name will be "a.p" or "b.p" etc)
-    with open(indexPath + str(label) + ".p", "rb") as f: 
-        temp = pickle.load(f)
-        for i in tempIndexes:
-            for token in tempIndexes[i][label]:
-                for docid in tempIndexes[i][label][token]:
-                    temp.setdefault(token, defaultdict(Posting))
-                    temp[token][docid].updateFreq(tempIndexes[i][label][token][docid].termfreq)
-        
-    #re-pickle the dict
-    with open(indexPath + str(label) + ".p", "wb") as f:
-        pickle.dump(temp, f, pickle.HIGHEST_PROTOCOL)
-    
-    #always remember to close file handles :)
-    for f in fileObjects:
-        f.close()
-        
-    gc.collect()
-        
+def updateIndex(labels):
+    #unpickle a partialIndex (file name will be "a.p" or "b.p" etc)
+    #then unpickle each tempIndex from temp folder and dump to partialIndex
+    for label in labels:
+        with open(indexPath + str(label) + ".p", "rb") as f: #open partialIndex
+            partialIndex = pickle.load(f)
+            for i in range(numThreads): #open each of the tempIndexes
+                with open(tempIndexPath + str(i) + ".temp", "rb") as temp:
+                    tempIndex = pickle.load(temp)
+                    for token in tempIndex[label]:
+                        for docid in tempIndex[label][token]:
+                            partialIndex.setdefault(token, defaultdict(Posting))
+                            partialIndex[token][docid].updateFreq(tempIndex[label][token][docid].termfreq)
+                del tempIndex
+                gc.collect()
+        #re-pickle the dict
+        with open(indexPath + str(label) + ".p", "wb") as f:
+            pickle.dump(partialIndex, f, pickle.HIGHEST_PROTOCOL)
+        gc.collect() 
     
 def dump(executor):
     global jobList, start_time
     start_time = time.time()
     #give each thread a label (such as 'a' 'b' etc) to work on
-    for label in 'abcdefghijklmnopqrstuvwxyz':
+    for labels in labelChunks():
         if goFast:
-            jobList.append(executor.submit(updateIndex, label))
+            jobList.append(executor.submit(updateIndex, labels))
         else:
-            updateIndex(label)
+            updateIndex(labels)
     futures.wait(jobList) #wait for all threads to finish
 
     #clear temp indexes for the next chunk of data
@@ -146,7 +135,7 @@ def dump(executor):
 
 #helper function
 #breaks fileList into chunks of chunkSize
-#files should be evenly distributed across the fileList
+#files in chunks should be evenly distributed across the fileList
 #in main, fileList is sorted biggest filesize -> smallest filesize
 #so it should be a good mix of big and small files
 def chunks(fileList):
@@ -154,18 +143,24 @@ def chunks(fileList):
     for i in range(0, totalSize, chunkSize):
         yield fileList[i:i+chunkSize]
         
-def calculateTFIDF(label, N):
-    with open(indexPath + label + ".p", "rb") as file:
-        partialIndex = pickle.load(file)
+def labelChunks():
+    alphabet = "abcdefghijklmnopqrstuvwxyz"
+    for i in range(numThreads):
+        yield alphabet[i::numThreads]
         
-    for token in partialIndex:
-        for docid in partialIndex[token]:
-            tf = partialIndex[token][docid].termfreq
-            df = len(partialIndex[token])
-            partialIndex[token][docid].tfidf = tf * math.log(N/df)
-        
-    with open(indexPath + label + ".p", "wb+") as file:
-        partialIndex = pickle.dump(partialIndex, file, pickle.HIGHEST_PROTOCOL)
+def calculateTFIDF(labels, N):
+    for label in labels:
+        with open(indexPath + label + ".p", "rb") as file:
+            partialIndex = pickle.load(file)
+            
+        for token in partialIndex:
+            for docid in partialIndex[token]:
+                tf = partialIndex[token][docid].termfreq
+                df = len(partialIndex[token])
+                partialIndex[token][docid].tfidf = tf * math.log(N/df)
+            
+        with open(indexPath + label + ".p", "wb+") as file:
+            partialIndex = pickle.dump(partialIndex, file, pickle.HIGHEST_PROTOCOL)
     
 			
 def main():
@@ -230,7 +225,7 @@ def main():
         #calculate tfidf
         start_time = time.time()
         N = len(fileList)
-        for label in 'abcdefghijklmnopqrstuvwxyz':
+        for label in labelChunks():
             if goFast:
                 jobList.append(executor.submit(calculateTFIDF, label, N))
             else:
