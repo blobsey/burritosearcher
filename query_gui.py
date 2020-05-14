@@ -14,38 +14,25 @@ def run_query():
     
     with open("lookup.meme", "rb") as file:
         lookup = pickle.load(file)
+        
+    temp = dict()
     
-    temp = dict() #holds the partial indexes
-    unloadQueue = list() #so we can unload oldest index
-    for label in "clmaose": #dont worry about it :) 
+    for label in "abcdefghijklmnopqrstuvwxyz":
         with open("./index/" + label + ".positions", "rb") as file:
             temp[label] = pickle.load(file)
-        unloadQueue.append(label)
+    
+    
 
     while True:
         query = input("Input query search: ")
         start_time = time.time()
         
         tokens = [ps.stem(word.lower()) for word in re.findall(reg, query)]
-          
-        loadMe = list()
-        for token in tokens:
-            if token[0] not in unloadQueue:
-                loadMe.append(token[0])
-            else: #if in cache, re-add it to the front
-                unloadQueue.remove(token[0])
 
         #for each token, store list of docs that contain
         results = list()  
         postings = dict()
         for token in tokens: 
-            unloadNow = False
-            if token[0] in loadMe: #if token not in cache
-                unloadNow = True
-                with open("./index/" + token[0] + ".positions", "rb") as file:
-                    temp[token[0]] = pickle.load(file)
-            unloadQueue.append(token[0])
-            
             position = temp[token[0]].get(token)
             if position != None: #if token exists in index
                 with open("./index/" + token[0] + ".p", "rb") as file:
@@ -55,9 +42,10 @@ def run_query():
             else:
                 results.append(set())
                 
-            if unloadNow: #we added a new partialindex to cache, so delete the oldest one
-                del temp[unloadQueue.pop(0)]
-                gc.collect()
+            gc.collect()
+            
+        if not tokens:
+            results.append(set())
             
                 
         print("fetching all docs for each token took", (time.time() - start_time), "seconds")
