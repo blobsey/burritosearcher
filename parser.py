@@ -1,4 +1,8 @@
-import os, time, re, gc, pickle, glob, orjson, lxml, math
+import os, time, re, gc, glob, orjson, lxml, math
+try:
+    import cPickle as pickle
+except:
+    import pickle
 import logging
 from collections import defaultdict 
 from nltk.stem import PorterStemmer
@@ -147,7 +151,7 @@ def labelChunks():
     for i in range(numThreads):
         yield alphabet[i::numThreads]
         
-def calculateTFIDF(labels, N):
+def finalizeIndex(labels, N):
     for label in labels:
         with open(indexPath + label + ".p", "rb") as file:
             partialIndex = pickle.load(file)
@@ -157,10 +161,17 @@ def calculateTFIDF(labels, N):
                 tf = partialIndex[token][docid].termfreq
                 df = len(partialIndex[token])
                 partialIndex[token][docid].tfidf = tf * math.log(N/df)
+                
+        positions = dict()
             
         with open(indexPath + label + ".p", "wb+") as file:
-            partialIndex = pickle.dump(partialIndex, file, pickle.HIGHEST_PROTOCOL)
-    
+            for token in partialIndex:
+                positions[token] = file.tell()
+                pickle.dump(partialIndex[token], file, pickle.HIGHEST_PROTOCOL)
+                
+        with open(indexPath + label + ".positions", "wb+") as file:
+            pickle.dump(positions, file, pickle.HIGHEST_PROTOCOL)
+            
 			
 def main():
     global jobList, chunkSize, numThreads, start_time
@@ -178,6 +189,13 @@ def main():
     #make a bunch of empty partial indexes
     for label in 'abcdefghijklmnopqrstuvwxyz':
         f = open(indexPath + label + ".p", "wb+")
+        empty = dict()
+        pickle.dump(empty, f, pickle.HIGHEST_PROTOCOL)
+        f.close()
+        
+    #make a bunch of empty lookup tables
+    for label in 'abcdefghijklmnopqrstuvwxyz':
+        f = open(indexPath + label + ".positions", "wb+")
         empty = dict()
         pickle.dump(empty, f, pickle.HIGHEST_PROTOCOL)
         f.close()
@@ -203,7 +221,7 @@ def main():
     fileList.sort(key=lambda s: s[0], reverse = False)
     log.warning("Building file list took %s seconds", (time.time() - start_time))
     
-    #executor is gives jobs to threads
+    #executor gives jobs to threads
     with multithreader(max_workers = numThreads) as executor:   
         #split fileList into chunks
         for chunkNum, chunk in enumerate(chunks(fileList)):
@@ -226,12 +244,12 @@ def main():
         N = len(fileList)
         for label in labelChunks():
             if goFast:
-                jobList.append(executor.submit(calculateTFIDF, label, N))
+                jobList.append(executor.submit(finalizeIndex, label, N))
             else:
-                calculateTFIDF(label, N)
+                finalizeIndex(label, N)
                 
         futures.wait(jobList)
-        log.warning("Calculating TF-IDF took %s seconds", (time.time() - start_time))
+        log.warning("Finalizing index took %s seconds", (time.time() - start_time))
 
 
 if __name__ == "__main__":

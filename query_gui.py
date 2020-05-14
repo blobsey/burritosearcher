@@ -1,4 +1,8 @@
-import re, pickle, orjson, bisect, time, gc
+import re, orjson, bisect, time, gc
+try:
+    import cPickle as pickle
+except:
+    import pickle
 from nltk.stem import PorterStemmer
 from statistics import mean
 
@@ -13,13 +17,10 @@ def run_query():
     
     temp = dict() #holds the partial indexes
     unloadQueue = list() #so we can unload oldest index
-    print("Loading", end="", flush=True)
     for label in "clmaose": #dont worry about it :) 
-        with open("./index/" + label + ".p", "rb") as file:
+        with open("./index/" + label + ".positions", "rb") as file:
             temp[label] = pickle.load(file)
-        print(".", end="", flush=True)
         unloadQueue.append(label)
-    print("")
 
     while True:
         query = input("Input query search: ")
@@ -36,17 +37,21 @@ def run_query():
 
         #for each token, store list of docs that contain
         results = list()  
+        postings = dict()
         for token in tokens: 
             unloadNow = False
             if token[0] in loadMe: #if token not in cache
                 unloadNow = True
-                with open("./index/" + token[0] + ".p", "rb") as file:
+                with open("./index/" + token[0] + ".positions", "rb") as file:
                     temp[token[0]] = pickle.load(file)
             unloadQueue.append(token[0])
             
-            postings = temp[token[0]].get(token) #get all docs with this token
-            if postings != None: #if token exists in index
-                results.append(set(postings.keys())) 
+            position = temp[token[0]].get(token)
+            if position != None: #if token exists in index
+                with open("./index/" + token[0] + ".p", "rb") as file:
+                    file.seek(position)
+                    postings[token] = pickle.load(file) #get all docs with this token
+                results.append(set(postings[token].keys())) 
             else:
                 results.append(set())
                 
@@ -61,7 +66,7 @@ def run_query():
         #rank by tfidf      
         rankings = list()
         for docid in set.intersection(*results): #boolean AND, intersect sets of docids
-            tfidfMean = mean([temp[token[0]][token][docid].tfidf for token in tokens]) #avg tfidf score for all tokens
+            tfidfMean = mean([postings[token][docid].tfidf for token in tokens]) #avg tfidf score for all tokens
             bisect.insort(rankings, (tfidfMean, docid)) #record the avg tf-idf, docid
 
         for i in range(-1, -6, -1):
