@@ -36,7 +36,6 @@ indexPath = "./index/"
 tempIndexPath = "./temp/"
 
 #only tokenize text in these tags
-#DISABLED RIGHT NOW
 tagList = ["h1", "h2", "h3", "strong", "b"]
              
 
