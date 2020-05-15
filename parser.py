@@ -27,7 +27,7 @@ numThreads = 6
 
 #how many files to process at once
 #each thread gets an ~equal section
-chunkSize = 10000
+chunkSize = 25000
 
 #folder containing corpus
 corpusFolder = "corpus"
