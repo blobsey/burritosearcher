@@ -9,7 +9,7 @@ from statistics import mean
 reg = re.compile(r"[a-zA-Z]+")
 ps = PorterStemmer()
 
-def run_query():
+def run_query(word = ""):
     start_time = time.time()
     
     with open("lookup.meme", "rb") as file:
@@ -24,7 +24,8 @@ def run_query():
     
 
     while True:
-        query = input("Input query search: ")
+        #query = input("Input query search: ")
+        query = word
         start_time = time.time()
         
         tokens = [ps.stem(word.lower()) for word in re.findall(reg, query)]
@@ -53,6 +54,7 @@ def run_query():
                     
         #rank by tfidf      
         rankings = list()
+        passed_list = list()
         for docid in set.intersection(*results): #boolean AND, intersect sets of docids
             tfidfMean = mean([postings[token][docid].tfidf for token in tokens]) #avg tfidf score for all tokens
             bisect.insort(rankings, (tfidfMean, docid)) #record the avg tf-idf, docid
@@ -61,12 +63,12 @@ def run_query():
             try:
                 with open(lookup[rankings[i][1]][1], "rb") as file: #look up the actual webpage from rankings[i][1] (the docid)
                     site = orjson.loads(file.read())
-                    print ( site["url"].ljust(85), "tf-idf score:", "{:.3f}".format(rankings[i][0]))
+                    passed_list.append((site["url"].ljust(85), "tf-idf score:", "{:.3f}".format(rankings[i][0])))
                     # with open(str(-i) + ".html", "wb+") as dump: #this code dumps the results into html files
                     #     dump.write(site["content"].encode(encoding="utf-8", errors="ignore"))
             except IndexError:
                     print ( "n\\a".ljust(85), "tf-idf score:", "{:.3f}".format(0))
-        print("")
+        return passed_list
 
 
 if __name__ == "__main__":

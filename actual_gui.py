@@ -1,6 +1,8 @@
 from tkinter import Tk,Label,Entry,Button,OUTSIDE
 from PIL import ImageTk, Image
+from query_gui import run_query
 import os
+
 
 #Start the root
 root = Tk()
@@ -23,13 +25,25 @@ panel.pack(side = "bottom", fill = "both", expand = "no")
 #Search Entry Box
 e = Entry(root)
 e.pack()
-e.place(height=22, width=200, relx = .35, rely = .45)
+e.place(height=22, width=200, relx = .35, rely = .15)
 e.focus_set()
 
+def start_query():
+    global e
+    search = e.get()
+    top_five = run_query(search)
+    main_text = ""
+    for i in top_five:
+        main_text = main_text + i[0] + i[1] + i[2]
+        main_text += '\n'
+    result = Label(root, text = main_text)
+    result.pack()
+    result.place(height = 100, width = 600, relx = .13, rely = .4)
+
 #Search Button
-btn = Button(root, text = 'Search', command = root.destroy) 
+btn = Button(root, text = 'Search', command = start_query) 
 btn.pack()
-btn.place(bordermode=OUTSIDE, height=20, width=100, relx = .41, rely = .5)
+btn.place(bordermode=OUTSIDE, height=20, width=100, relx = .41, rely = .2)
 
 #Kickstart mainloop
 root.mainloop()
