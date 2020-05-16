@@ -256,9 +256,13 @@ def main():
         log.warning("Building partialIndexes took %s seconds", (time.time() - start_time))
    
 if __name__ == "__main__":
-    print("LETS GOOOOOOOO")
-    start = time.time()
-    main()
-    print("--- %s seconds ---" % (time.time() - start))
-    print("PRESS ANY KEY TO QUIT")
-    input()             
+    yes = input("ARE YOU READY TO GO FAST (y/n)")
+    if yes == "n":
+        input(":(\nPRESS ANY KEY TO QUIT")
+    elif yes == "y":
+        print("LETS GOOOOOOOO")
+        start = time.time()
+        main()
+        print("--- %s seconds ---" % (time.time() - start))
+        print("PRESS ANY KEY TO QUIT")
+        input()             
