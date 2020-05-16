@@ -48,17 +48,17 @@ class query:
             rankings = list()
             passed_list = list()
             for docid in set.intersection(*results): #boolean AND, intersect sets of docids
-                tfidfMean = mean([postings[token][docid].tfidf for token in tokens]) #avg tfidf score for all tokens
-                bisect.insort(rankings, (tfidfMean, docid)) #record the avg tf-idf, docid
+                tfidfSum = sum([postings[token][docid].tfidf for token in tokens]) #avg tfidf score for all tokens
+                bisect.insort(rankings, (tfidfSum, docid)) #record the sum tf-idf, docid
 
             #pass results (strings) containing top5
             for i in range(-1, -6, -1):
                 try:
                     with open(lookup[rankings[i][1]][1], "rb") as file: #look up the actual webpage from rankings[i][1] (the docid)
                         site = orjson.loads(file.read())
-                        passed_list.append((site["url"], "\ntf-idf score: ", "{:.3f}".format(rankings[i][0]) + "\n"))
-                        # with open(str(-i) + ".html", "wb+") as dump: #this code dumself.ps the results into html files
-                        #     dump.write(site["content"].encode(encoding="utf-8", errors="ignore"))
+                        passed_list.append((site["url"], "\ntf-idf score: ", "{:.3f}".format(rankings[i][0]), "\n"))
+##                        with open(str(-i) + ".html", "wb+") as dump: #this code dumself.ps the results into html files
+##                            dump.write(site["content"].encode(encoding="utf-8", errors="ignore"))
                 except IndexError:
                         passed_list.append( "n\\a" + "\ntf-idf score:" + "{:.3f}".format(0) + "\n")
             return passed_list
@@ -67,4 +67,9 @@ class query:
 
 if __name__ == "__main__":
     meme = query()
-    meme.run_query("test")
+    while(True):
+        print("Enter search query: ", end="")
+        inputMeme = input()
+        memes = meme.run_query(inputMeme)
+        for thing in memes:
+            print (thing[0])

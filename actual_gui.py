@@ -1,6 +1,6 @@
 from tkinter import Tk,Label,Entry,Button,OUTSIDE,LEFT
 from PIL import ImageTk, Image
-from query_gui import query
+from query import query
 import os
 
 searcher = None
