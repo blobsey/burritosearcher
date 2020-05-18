@@ -1,4 +1,4 @@
-import os, time, re, gc, glob, orjson, lxml, math
+import os, time, re, gc, glob, orjson, lxml, math, binascii
 try:
     import cPickle as pickle
 except:
@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 from concurrent import futures
 from concurrent.futures import ProcessPoolExecutor as multithreader
 from posting import Posting
+from fetch import fetch
 
 #GLOBAL VARIABLES IMPORTANT DONT DELETE
 ps = PorterStemmer()
@@ -49,6 +50,7 @@ def index(fileList, numThreads):
     results = list() #will hold list of partial indexes, one for each thread to process later
     for i in range(numThreads): #populate with empty indexes (dicts)
         results.append(list())
+    fingerprints = list()
         
     #dont want same token in 2 diff partial indexes, so split up by first letter
     indexChooser = dict()
@@ -74,12 +76,19 @@ def index(fileList, numThreads):
             for word in termFrequencies: 
                 token = ps.stem(word) #merge words with the same stem
                 temp[token] += termFrequencies[word]
-            for k, v in temp.items(): 
-                results[indexChooser[k[0]]].append((k, docid, v))
-                
-    #do fingerprinting here
+            fingerprint = [4294967312] * 20
+            for token, termfreq in temp.items(): 
+                results[indexChooser[token[0]]].append((token, docid, termfreq)) #add document to posting list for each token 
+                for i in range(0, 20):
+                    x = binascii.crc32((token + str(termfreq)).encode("ascii", errors="ignore")) #hash each token+termfreq
+                    a = i + 1
+                    b = i + 2
+                    hashed = (a*x + b) % 4294967311
+                    if hashed < fingerprint[i]:
+                        fingerprint[i] = hashed       
+            fingerprints.append((fingerprint, docid))
 
-    return results
+    return results, fingerprints
  
 #takes a partial list of (token, docid, wordfreq) tuples, dumps to a .tmp file           
 def dump(partialList, threadNum):
@@ -94,9 +103,35 @@ def dump(partialList, threadNum):
         
     del temp
     gc.collect()
+
+#compares each fingerprint in chunk with the whole list of fingerprints
+#fingerprints are tuples of format(fingerprint, docid)
+def detectDuplicates(chunk, fingerprints):
+    duplicates = set() #will contain (section of) docids that are duplicates
+    originals = set() #will contain ORIGINAL documents (want to keep at least one)
+    for currentFingerprint in chunk:
+        for otherFingerprint in fingerprints: #check each fingerprint with every other fingerprint
+            if currentFingerprint[1] == otherFingerprint[1]: #dont compare a doc with itself
+                break
+            elif currentFingerprint[1] in originals: #dont delete the original document
+                break
+            else: #compare signatures
+                isDuplicate = True #consider them duplicates initially
+                limit = 1 #limit is how many non matching hashes to allow
+                nonMatching = 0 #counts how many non matching hashes 
+                for a, b in zip(currentFingerprint[0], otherFingerprint[0]):
+                    if a != b:
+                        nonMatching += 1
+                    if nonMatching > limit: #too many non-matching hashes, they aren't duplicates
+                        isDuplicate = False
+                        break
+                if isDuplicate:
+                    duplicates.add(currentFingerprint[1])
+                    originals.add(otherFingerprint[1])
+                    break
+    return duplicates
         
-        
-def finalizeIndex(threadNum, N):
+def finalizeIndex(threadNum, N, duplicates):
     #load a partialIndex, it contains a dict in format {token:list of tuples}
     #tuple is in the format (docid, wordfreq)
     #ex. to access the word freq do partialIndex[token][1]
@@ -110,6 +145,8 @@ def finalizeIndex(threadNum, N):
                 positions[token] = dump.tell() #record the seek position for ez access later
                 #calculate tfidf, construct posting list with docid, termfreq, tfidf
                 for tokentuple in partialIndex[token]:
+                    if tokentuple[0] in duplicates:
+                        continue
                     tf = math.log10(tokentuple[1]) + 1
                     df = len(partialIndex[token])
                     posting = Posting(tokentuple[0], tokentuple[1], tf * math.log10(N/df))
@@ -183,6 +220,8 @@ def main():
     fileList.sort(key=lambda s: s[0], reverse = False)
     log.warning("Building file list took %s seconds", (time.time() - start_time))
     
+    fingerprints = list()
+    duplicates = set()
     #executor gives jobs to threads
     with multithreader(max_workers = numThreads) as executor:   
         #split fileList into chunks
@@ -198,14 +237,16 @@ def main():
                 if goFast:
                     jobList.append(executor.submit(index, chunk[i::numThreads], numThreads))
                 else:
-                    partialIndexes.append(index(chunk[i::numThreads], numThreads))
+                    result = index(chunk[i::numThreads], numThreads)
+                    partialIndexes.append(result[0])
+                    fingerprints += result[1]
             #each element in partialIndexes holds list of tasks for each thread
             futures.wait(jobList)
             for job in jobList:
-                partialIndexes.append(job.result())
+                partialIndexes.append(job.result()[0])
+                fingerprints += job.result()[1]
             log.warning("Indexing chunk %s took %s seconds", chunkNum, (time.time() - start_time))
             
-            # start_time = time.time()
             #each partialIndex has a list of small jobs pre-chosen for each thread
             #need to merge all the separate small jobs so each thread gets a full job
             for partialIndex in partialIndexes:
@@ -238,8 +279,24 @@ def main():
             futures.wait(jobList)
             for i in range(int(numThreads/2), numThreads):
                 mergedLists[i].clear()
+            jobList.clear()
             gc.collect()
             log.warning("dumping took %s seconds", (time.time() - start_time))
+
+        #detect duplicates
+        start_time = time.time()
+        for fingerprintChunk in chunks(fingerprints):
+            for i in range(numThreads):
+                if goFast:
+                    jobList.append(executor.submit(detectDuplicates, fingerprintChunk[i::numThreads], fingerprints))
+                else:
+                    duplicates = duplicates.union(detectDuplicates(fingerprintChunk[i::numThreads], fingerprints))
+        futures.wait(jobList)
+        for job in jobList:
+            duplicates = duplicates.union(job.result())
+        del fingerprints
+        gc.collect()
+        log.warning("duplicate detection took %s seconds", (time.time() - start_time))
                     
     start_time = time.time()
     with multithreader(max_workers = int(numThreads / 2)) as executor:
@@ -247,13 +304,13 @@ def main():
         N = len(fileList)
         for i in range(numThreads):
             if goFast:
-                job = executor.submit(finalizeIndex, i, N)
+                job = executor.submit(finalizeIndex, i, N, duplicates)
                 jobList.append(job)
             else:
-                finalizeIndex(i, N)
+                finalizeIndex(i, N, duplicates)
               
         futures.wait(jobList)
-        log.warning("Building partialIndexes took %s seconds", (time.time() - start_time))
+        log.warning("Finalizing indexes took %s seconds", (time.time() - start_time))
    
 if __name__ == "__main__":
     yes = input("ARE YOU READY TO GO FAST (y/n)")
@@ -264,5 +321,4 @@ if __name__ == "__main__":
         start = time.time()
         main()
         print("--- %s seconds ---" % (time.time() - start))
-        print("PRESS ANY KEY TO QUIT")
-        input()             
+        input("PRESS ANY KEY TO QUIT")          

@@ -68,8 +68,8 @@ class query:
                     with open(lookup[rankings[i][1]][1], "rb") as file: #look up the actual webpage from rankings[i][1] (the docid)
                         site = orjson.loads(file.read())
                         passed_list.append((site["url"], "\ntf-idf score: ", "{:.3f}".format(rankings[i][0]), "\n"))
-##                        with open(str(-i) + ".html", "wb+") as dump: #this code dumself.ps the results into html files
-##                            dump.write(site["content"].encode(encoding="utf-8", errors="ignore"))
+                        with open(str(-i) + ".html", "wb+") as dump: #this code dumself.ps the results into html files
+                            dump.write(site["content"].encode(encoding="utf-8", errors="ignore"))
                 except IndexError:
                         passed_list.append( "n\\a" + "\ntf-idf score:" + "{:.3f}".format(0) + "\n")
             return passed_list
