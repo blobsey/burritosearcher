@@ -10,7 +10,6 @@ from bs4 import BeautifulSoup
 from concurrent import futures
 from concurrent.futures import ProcessPoolExecutor as multithreader
 from posting import Posting
-from fetch import fetch
 
 #GLOBAL VARIABLES IMPORTANT DONT DELETE
 ps = PorterStemmer()

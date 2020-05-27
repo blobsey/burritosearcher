@@ -1,4 +1,4 @@
-import re, orjson, bisect, gc
+import re, orjson, bisect, gc, time
 from collections import defaultdict
 try:
     import cPickle as pickle
@@ -81,6 +81,9 @@ if __name__ == "__main__":
     while(True):
         print("Enter search query: ", end="")
         inputMeme = input()
+        start_time = time.time()
         memes = meme.run_query(inputMeme)
+        print("Searching for", inputMeme, "took", "seconds", (time.time() - start_time))
         for thing in memes:
             print (thing[0])
+
